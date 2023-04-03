@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { Alert, View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { Alert, View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Card } from 'react-native-paper';
 import Dialog from "react-native-dialog";
  
 const ConfigScreen = ({navigation}) => {
+  
   const [foodVisible, setFoodVisible] = useState(false);
   const [foodAmount, setFoodAmountValue] = useState('');
 
@@ -12,6 +13,10 @@ const ConfigScreen = ({navigation}) => {
 
   const [weightVisible, setWeightVisible] = useState(false);
   const [weightAmount, setWeightValue] = useState('');
+
+  const [deleteVisible, setDeleteVisible] = useState(false);
+
+  const [device, setDevice] = useState(null);
 
   const autoFeed = () => {
     navigation.navigate("Schedule");
@@ -29,6 +34,17 @@ const ConfigScreen = ({navigation}) => {
     setWeightVisible(true);
   }
 
+  const deleteDevice = () => {
+    setDeleteVisible(true);
+  }
+
+  useEffect(() => {
+    fetch(`http://35.209.129.48/devices?user=${global.username}&serial=${global.device}`)
+      .then(response => response.json())
+      .then(data => setDevice(data))
+      .catch(error => console.error(error));
+  }, []);
+
   const handleFeed = () => {
     if(isNaN(foodAmount) || foodAmount == '') {
       Alert.alert(
@@ -43,7 +59,38 @@ const ConfigScreen = ({navigation}) => {
       );
       return;
     }
+
+    fetch('http://35.209.129.48/action', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: "feednow",
+        amount: foodAmount,
+        owner: `${global.username}`,
+        serial: `${global.device}`,
+      }),
+    }).then(response => response.json())
+    .then(data => {
+      console.log(data);
+
+      if(data.status == "ok") {
+        Alert.alert(
+          'Pranešimas',
+          'Maistas sėkmingas išduotas',
+          [
+            {
+              text: 'Supratau',
+              style: 'cancel',
+            },
+          ],
+        );
+      }
+    })
     setFoodVisible(false);
+    navigation.navigate("Home");
+    navigation.navigate("Config");
   };
 
   const handleSupervisor = () => {
@@ -60,6 +107,7 @@ const ConfigScreen = ({navigation}) => {
       );
       return;
     }
+
     setSupervisorVisible(false);
   };
 
@@ -77,14 +125,91 @@ const ConfigScreen = ({navigation}) => {
       );
       return;
     }
+
+    fetch('http://35.209.129.48/action', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: "addweightcof",
+        weightcof: weightAmount,
+        owner: `${global.username}`,
+        serial: `${global.device}`,
+      }),
+    }).then(response => response.json())
+    .then(data => {
+      console.log(data);
+
+      if(data.status == "ok") {
+        Alert.alert(
+          'Pranešimas',
+          'Svorio reikšmė sėkmingai pakeista',
+          [
+            {
+              text: 'Supratau',
+              style: 'cancel',
+            },
+          ],
+        );
+      }
+    })
+
     setWeightVisible(false);
+    navigation.navigate("Home");
+    navigation.navigate("Config");
   };
 
+  const handleDelete = () => {
+    fetch('http://35.209.129.48/action', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: "deletedevice",
+        owner: `${global.username}`,
+        serial: `${global.device}`,
+      }),
+    }).then(response => response.json())
+    .then(data => {
+      console.log(data);
+
+      if(data.status == "ok") {
+        Alert.alert(
+          'Pranešimas',
+          'Įrenginys sėkmingai ištrintas',
+          [
+            {
+              text: 'Supratau',
+              style: 'cancel',
+            },
+          ],
+        );
+      }
+    })
+
+    setDeleteVisible(false);
+    navigation.navigate("Home");
+  }
+
   return (
+    <ScrollView>
     <View style={styles.container}>
+      {device && (
+        <Text style={{fontSize: 30, padding: 10, marginBottom: 20}}>{device.name}</Text>
+      )}
+
       <Card style={styles.cards}>
-        <Text style={{fontSize: 20, padding: 10}}>Liko maisto:</Text>
-        <Text style={{fontSize: 30, padding: 10}}>1,1 kg</Text>
+        <Text style={{fontSize: 15, padding: 10}}>Liko maisto:</Text>
+        {device && (
+          <Text style={{fontSize: 25, padding: 10}}>{device.foodleft} kg</Text>
+        )}
+
+        <Text style={{fontSize: 15, padding: 10}}>Paskutinį kartą buvo maitinta:</Text>
+        {device && (
+          <Text style={{fontSize: 25, padding: 10}}>{device.lastfeed}</Text>
+        )}
       </Card>
 
       <TouchableOpacity style={styles.button} onPress={feedNow}>
@@ -101,6 +226,10 @@ const ConfigScreen = ({navigation}) => {
 
       <TouchableOpacity style={styles.button} onPress={addWeight}>
         <Text style={styles.buttonText}>Automatinis maitinimas pagal svorį</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.buttonDelete} onPress={deleteDevice}>
+        <Text style={styles.buttonText}>Ištrinti įrenginį</Text>
       </TouchableOpacity>
 
       <Dialog.Container visible={foodVisible}>
@@ -128,11 +257,30 @@ const ConfigScreen = ({navigation}) => {
         <Dialog.Description>
           Nurodykite kiekį kuris bus išduodamas kiekvienam kūno kilogramui (pvz.: 20 reikš jog kiekvienam kilogramui kūno svorio bus išduodama 20g maisto)
         </Dialog.Description>
+        <Dialog.Description>
+          Dabartinis nustatytas kiekis:
+          {device && (
+            <Text style={{fontSize: 25, padding: 10, marginLeft: 10}}> {device.weightcof}</Text>
+          )}
+        </Dialog.Description>
         <Dialog.Input value={weightAmount} onChangeText={(text) => setWeightValue(text)} />
         <Dialog.Button label="Atšaukti" onPress={() => setWeightVisible(false)} />
-        <Dialog.Button label="Maitinti" onPress={handleWeight} />
+        <Dialog.Button label="Nustatyti" onPress={handleWeight} />
+      </Dialog.Container>
+
+      <Dialog.Container visible={deleteVisible}>
+        <Dialog.Title>Ištrinti įrenginį</Dialog.Title>
+        <Dialog.Description>
+          Ar tikrai norite ištrinti
+        {device && (
+        <Text style={{fontWeight: 'bold'}}> {device.name}</Text>
+      )}?
+        </Dialog.Description>
+        <Dialog.Button label="Atšaukti" onPress={() => setDeleteVisible(false)} />
+        <Dialog.Button label="Ištrinti" onPress={handleDelete} />
       </Dialog.Container>
     </View>
+    </ScrollView>
   );
 };
 
@@ -144,6 +292,14 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#798777',
+    borderRadius: 4,
+    padding: 12,
+    width: 250,
+    marginBottom: 50,
+    //flex: 1,
+  },
+  buttonDelete: {
+    backgroundColor: '#B83B5E',
     borderRadius: 4,
     padding: 12,
     width: 250,

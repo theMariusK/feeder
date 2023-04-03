@@ -1,12 +1,6 @@
 import React, { useState } from 'react';
 import { Alert, View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 
-import Constants from "expo-constants";
-
-const { manifest } = Constants;
-
-const uri = `http://35.209.129.48/`;
-
 const LoginScreen = ({navigation}) => {
   const [user, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,9 +18,9 @@ const LoginScreen = ({navigation}) => {
       }),
     }).then(response => response.json())
     .then(data => {
-      console.log(typeof(data));
+      console.log(data);
 
-      if(data == false) {
+      if(data.status == "fail") {
         Alert.alert(
           'Pranešimas',
           'Vartotojas su tokiais prisijungimo duomenimis neegzistuoja',
@@ -37,9 +31,11 @@ const LoginScreen = ({navigation}) => {
             },
           ],
         );
+        global.username = "";
         navigation.navigate("Home"); // temp
       }
       else {
+        global.username = data.username;
         navigation.navigate("Home");
       }
     })
@@ -92,7 +88,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   button: {
-    backgroundColor: '#6A2C70',
+    backgroundColor: '#53354A',
     borderRadius: 4,
     padding: 12,
     marginTop: 16,

@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Button } from 'react-native';
 import { Card } from 'react-native-paper';
 import { Icon } from '@rneui/themed';
 
 const HomeScreen = ({navigation}) => {
+  const [devices, setDevices] = useState([]);
+
   const registerProduct = () => {
     navigation.navigate("Camera");
   };
@@ -12,9 +14,19 @@ const HomeScreen = ({navigation}) => {
     navigation.navigate("Login");
   };
 
-  const configure = () => {
+  const configure = (device) => {
+    global.device = device;
     navigation.navigate("Config");
   };
+
+  if(global.username != "") {
+    useEffect(() => {
+      fetch(`http://35.209.129.48/devices?user=${global.username}`)
+        .then(response => response.json())
+        .then(data => setDevices(data))
+        .catch(error => console.error(error));
+    }, []);
+  }
 
   return (
     <ScrollView>
@@ -27,25 +39,19 @@ const HomeScreen = ({navigation}) => {
         <Text style={styles.buttonText}>Atsijungti</Text>
       </TouchableOpacity>
 
-      <Card style={styles.cards}>
-        <Text style={styles.cardsText}>Testavimas</Text>
-        <Card.Content>
-          <Icon size={100} name='inbox' />
-        </Card.Content>
-        <TouchableOpacity style={styles.config} onPress={configure}>
-          <Text style={styles.buttonText}>Konfigūruoti</Text>
-        </TouchableOpacity>
-      </Card>
-
-      <Card style={styles.cards}>
-        <Text style={styles.cardsText}>Testavimas</Text>
-        <Card.Content>
-          <Icon size={100} name='inbox' />
-        </Card.Content>
-        <TouchableOpacity style={styles.config} onPress={configure}>
-          <Text style={styles.buttonText}>Konfigūruoti</Text>
-        </TouchableOpacity>
-      </Card>
+      {devices.map(item => (
+        <>
+        <Card style={styles.cards}>
+          <Text style={styles.cardsText}>{item.name}</Text>
+          <Card.Content>
+            <Icon size={100} name='inbox' />
+          </Card.Content>
+          <TouchableOpacity style={styles.config} onPress={() => configure(item.serial)}>
+            <Text style={styles.buttonText}>Konfigūruoti</Text>
+          </TouchableOpacity>
+        </Card>
+        </>
+      ))}
     </View>
     </ScrollView>
   );

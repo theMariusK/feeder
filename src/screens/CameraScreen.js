@@ -4,6 +4,7 @@ import { BarCodeScanner } from 'expo-barcode-scanner';
 import Dialog from "react-native-dialog";
 
 let using = false;
+let deviceSerial = "";
 
 export default function Camera({navigation}) {
   const [hasPermission, setHasPermission] = useState(null);
@@ -11,6 +12,9 @@ export default function Camera({navigation}) {
 
   const [serialVisible, setSerialVisible] = useState(false);
   const [serialNumber, setSerialValue] = useState('');
+
+  const [nameVisible, setNameVisible] = useState(false);
+  const [deviceName, setNameValue] = useState('');
 
   useEffect(() => {
     const getBarCodeScannerPermissions = async () => {
@@ -20,28 +24,85 @@ export default function Camera({navigation}) {
     getBarCodeScannerPermissions();
     }, []);
 
-  const handleBarCodeScanned = ({ type, data }) => {
+  const handleBarCodeScanned = ({ data }) => {
     setScanned(true);
-    Alert.alert(
-        'Pranešimas',
-        `Serijinis numeris (${data}), tipas: ${type} `,
-        [
-          {
-            text: 'Atšaukti',
-          },
-          {
-            text: 'Susieti',
-            onPress: () => console.log(`${data}`),
-          },
-        ],
-      );
+
+    fetch(`http://35.209.129.48/devices`)
+        .then(response => response.json())
+        .then(json => {    
+            for(let i = 0; i < json.length; i++) {
+                console.log(`${json[i].serial} - ${data}`);
+                if(json[i].serial == data) {
+                    Alert.alert(
+                        'Pranešimas',
+                        `Šis įrenginys jau užregistruotas`,
+                        [
+                          {
+                            text: 'Supratau',
+                          },
+                        ],
+                    );
+                    return;
+                }
+            }
+            deviceSerial = data;
+            setNameVisible(true);
+          })
+        .catch(error => console.error(error));
   };
 
+  const handleName = () => {
+    if(deviceName == "") {
+        Alert.alert(
+            'Pranešimas',
+            'Reikšmė negali būti tuščia',
+            [
+              {
+                text: 'Supratau',
+                style: 'cancel',
+              },
+            ],
+        );
+        return;
+    }
+
+    fetch('http://35.209.129.48/action', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: "registerdevice",
+        name: deviceName,
+        owner: `${global.username}`,
+        serial: deviceSerial,
+      }),
+    }).then(response => response.json())
+    .then(data => {
+      console.log(data);
+
+      if(data.status == "ok") {
+        Alert.alert(
+          'Pranešimas',
+          'Įrenginys sėkmingai susietas',
+          [
+            {
+              text: 'Supratau',
+              style: 'cancel',
+            },
+          ],
+        );
+      }
+    })
+
+    setNameVisible(false);
+  }
+
   if (hasPermission === null) {
-    return <Text>Reikalinga prieiga prie kameros</Text>;
+    return <Text style={{marginTop: 100, textAlign: 'center'}}>Reikalinga prieiga prie kameros</Text>;
   }
   if (hasPermission === false) {
-    return <Text>Nėra prieigos prie kameros</Text>;
+    return <Text style={{marginTop: 100, textAlign: 'center'}}>Nėra prieigos prie kameros</Text>;
   }
   if(using == false) {
     Alert.alert(
@@ -62,7 +123,7 @@ export default function Camera({navigation}) {
   }
 
   const handleSerial = () => {
-    if(isNaN(serialNumber) || serialNumber == '') {
+    if(isNaN(serialNumber) || serialNumber == '' || serialNumber.length >= 36) {
       Alert.alert(
         'Pranešimas',
         'Netinkama reikšmė',
@@ -75,6 +136,29 @@ export default function Camera({navigation}) {
       );
       return;
     }
+
+    fetch(`http://35.209.129.48/devices`)
+    .then(response => response.json())
+    .then(json => {    
+        for(let i = 0; i < json.length; i++) {
+            if(json[i].serial == serialNumber) {
+                Alert.alert(
+                    'Pranešimas',
+                    `Šis įrenginys jau užregistruotas`,
+                    [
+                        {
+                        text: 'Supratau',
+                        },
+                    ],
+                );
+                return;
+            }
+        }
+        deviceSerial = serialNumber;
+        setNameVisible(true);
+        })
+    .catch(error => console.error(error));
+
     setSerialVisible(false);
   };
 
@@ -101,6 +185,16 @@ export default function Camera({navigation}) {
         <Dialog.Input value={serialNumber} onChangeText={(text) => setSerialValue(text)} />
         <Dialog.Button label="Atšaukti" onPress={() => setSerialVisible(false)} />
         <Dialog.Button label="Atlikta" onPress={handleSerial} />
+      </Dialog.Container>
+
+      <Dialog.Container visible={nameVisible}>
+        <Dialog.Title>Įrenginio pavadinimas</Dialog.Title>
+        <Dialog.Description>
+          Nurodykite įrenginio pavadinimą
+        </Dialog.Description>
+        <Dialog.Input value={deviceName} onChangeText={(text) => setNameValue(text)} />
+        <Dialog.Button label="Atšaukti" onPress={() => setNameVisible(false)} />
+        <Dialog.Button label="Susieti" onPress={handleName} />
       </Dialog.Container>
     </View>
   );
