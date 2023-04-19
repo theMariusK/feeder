@@ -9,6 +9,7 @@ import (
     "database/sql"
     "io/ioutil"
     "strconv"
+    "github.com/eclipse/paho.mqtt.golang"
 )
 
 type credential struct {
@@ -233,34 +234,70 @@ func actionHandler(w http.ResponseWriter, r *http.Request) {
         w.Write(jsonResponse)
 
         // MQTT
+
+        opts := mqtt.NewClientOptions().AddBroker("tcp://broker.hivemq.com:1883").SetClientID("bak_feeder_server")
+        c := mqtt.NewClient(opts)
+        if token := c.Connect(); token.Wait() && token.Error() != nil {
+                panic(token.Error())
+        }
+        payload := fmt.Sprintf("[\"feed\", %f]", foodAmount)
+        token := c.Publish("bak/feeder-64321234/action", 0, false, payload)
+        token.Wait()
+
+        c.Disconnect(250)
+
     } else if data["action"] == "addsupervisor" && data["supervisor"] != nil {
-    } else if data["action"] == "addweightcof" && data["weightcof"] != nil {
-        stmt, err := db.Prepare("UPDATE feeder SET weight_cof=? WHERE serial=? AND owner=?")
-        if err != nil {
-            fmt.Println("Error in query:", err)
-            return
-        }
-        defer stmt.Close()
-
-        weightCof, _ := strconv.ParseFloat(data["weightcof"].(string), 32)
-        _, err = stmt.Query(weightCof, data["serial"], data["owner"])
-        if err != nil {
-            fmt.Println("Error in statement:", err)
-            return
+    } else if data["action"] == "getfoodleft" {
+        opts := mqtt.NewClientOptions().AddBroker("tcp://broker.hivemq.com:1883").SetClientID("bak_feeder_server")
+        c := mqtt.NewClient(opts)
+        if token := c.Connect(); token.Wait() && token.Error() != nil {
+                panic(token.Error())
         }
 
-        response := map[string]string{"status": "ok"}
+        handler := func(client mqtt.Client, msg mqtt.Message) {
+                food_left, _ := strconv.ParseFloat(string(msg.Payload()), 32)
+                fmt.Println(food_left)
 
-        jsonResponse, jsonErr := json.Marshal(response)
-        if jsonErr != nil {
-            http.Error(w, "Error encoding JSON", http.StatusInternalServerError)
-            return
+                if token := c.Unsubscribe("bak/feeder-64321234/food_left"); token.Wait() && token.Error() != nil {
+                        panic(token.Error())
+                }
+                c.Disconnect(250)
+
+
+                stmt, err := db.Prepare("UPDATE feeder SET food_left=? WHERE serial=? AND owner=?")
+                if err != nil {
+                    fmt.Println("Error in query:", err)
+                    return
+                }
+                defer stmt.Close()
+
+                _, err = stmt.Query(food_left, data["serial"], data["owner"])
+                if err != nil {
+                    fmt.Println("Error in statement:", err)
+                    return
+                }
+
+                response := map[string]string{"status": "ok"}
+
+                jsonResponse, jsonErr := json.Marshal(response)
+                if jsonErr != nil {
+                    http.Error(w, "Error encoding JSON", http.StatusInternalServerError)
+                    return
+                }
+
+                w.Header().Set("Content-Type", "application/json")
+                w.WriteHeader(http.StatusOK)
+                w.Write(jsonResponse)
         }
 
-        w.Header().Set("Content-Type", "application/json")
-        w.WriteHeader(http.StatusOK)
-        w.Write(jsonResponse)
+        token := c.Publish("bak/feeder-64321234/action", 0, false, "[\"food_left\"]")
+        token.Wait()
 
+        if token := c.Subscribe("bak/feeder-64321234/food_left", 0, handler); token.Wait() && token.Error() != nil {
+                panic(token.Error())
+        }
+
+        fmt.Println("GOT")
         // MQTT
     } else if data["action"] == "registerdevice" && data["name"] != nil {
         stmt, err := db.Prepare("INSERT INTO feeder (serial, food_left, last_feed, owner, weight_cof, name) VALUES (?, 0, NOW(), ?, 0, ?)")
